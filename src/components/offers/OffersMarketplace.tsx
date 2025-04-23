@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, DollarSign, MapPin, Globe, AlertTriangle, MessageCircle, RefreshCw, Filter } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { format, isAfter } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { useState, useEffect } from 'react';
+import { Calendar, DollarSign, MapPin, AlertTriangle, MessageCircle, RefreshCw, Filter, X } from 'lucide-react';
+import { format } from 'date-fns';
 import { fetchActiveOffers, expressInterestInOffer } from '../../lib/api';
 import OffersMap from './OffersMap';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface Offer {
   id: number;
@@ -26,7 +25,12 @@ interface Offer {
   user_email?: string;
 }
 
-export default function OffersMarketplace() {
+interface OffersMarketplaceProps {
+  onClose: () => void;
+}
+
+export default function OffersMarketplace({ onClose }: OffersMarketplaceProps) {
+  const { language } = useLanguage();
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [interestLoading, setInterestLoading] = useState<number | null>(null);
@@ -120,25 +124,24 @@ export default function OffersMarketplace() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
-            Ofertas Disponíveis
+            {language === 'pt' ? 'Ofertas Disponíveis' : 'Available Offers'}
           </h2>
           <p className="mt-3 max-w-2xl mx-auto text-xl text-gray-500 sm:mt-4">
-            Explore as ofertas ativas de nossos parceiros verificados
+            {language === 'pt' ? 'Explore as ofertas ativas de nossos parceiros verificados' : 'Explore active offers from our verified partners'}
           </p>
         </div>
 
-        {/* Filters */}
-        <div className="mt-8 flex flex-col sm:flex-row justify-between items-start sm:items-center">
-          <div className="flex space-x-2 mb-4 sm:mb-0">
-            <div className="relative">
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-48">
               <select
                 value={filter}
                 onChange={(e) => setFilter(e.target.value as 'all' | 'buy' | 'sell')}
                 className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
               >
-                <option value="all">Todas as ofertas</option>
-                <option value="buy">Ofertas de compra</option>
-                <option value="sell">Ofertas de venda</option>
+                <option value="all">{language === 'pt' ? 'Todas as ofertas' : 'All offers'}</option>
+                <option value="buy">{language === 'pt' ? 'Ofertas de compra' : 'Buy offers'}</option>
+                <option value="sell">{language === 'pt' ? 'Ofertas de venda' : 'Sell offers'}</option>
               </select>
             </div>
             <button
@@ -146,7 +149,7 @@ export default function OffersMarketplace() {
               className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
             >
               <Filter className="h-4 w-4 mr-1" />
-              Filtros
+              {language === 'pt' ? 'Filtros' : 'Filters'}
             </button>
           </div>
           <button
@@ -154,25 +157,32 @@ export default function OffersMarketplace() {
             className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
           >
             <RefreshCw className="h-4 w-4 mr-1" />
-            Atualizar
+            {language === 'pt' ? 'Atualizar' : 'Refresh'}
+          </button>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          >
+            <X className="h-4 w-4 mr-1" />
+            {language === 'pt' ? 'Fechar' : 'Close'}
           </button>
         </div>
 
         {/* Advanced Filters */}
         {showFilters && (
           <div className="mt-4 p-4 bg-white rounded-lg shadow">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Filtros Avançados</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">{language === 'pt' ? 'Filtros avançados' : 'Advanced filters'}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Commodity
+                  {language === 'pt' ? 'Commodity' : 'Commodity'}
                 </label>
                 <select
                   value={commodityFilter}
                   onChange={(e) => setCommodityFilter(e.target.value)}
                   className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm rounded-md"
                 >
-                  <option value="">Todas as commodities</option>
+                  <option value="">{language === 'pt' ? 'Todas as commodities' : 'All commodities'}</option>
                   {uniqueCommodities.map(commodity => (
                     <option key={commodity} value={commodity}>{commodity}</option>
                   ))}
@@ -188,7 +198,7 @@ export default function OffersMarketplace() {
                 }}
                 className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
-                Limpar Filtros
+                {language === 'pt' ? 'Limpar filtros' : 'Clear filters'}
               </button>
             </div>
           </div>
@@ -209,9 +219,9 @@ export default function OffersMarketplace() {
         ) : offers.length === 0 ? (
           <div className="mt-8 text-center py-12 bg-white rounded-lg shadow">
             <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900">Nenhuma oferta encontrada</h3>
+            <h3 className="text-lg font-medium text-gray-900">{language === 'pt' ? 'Nenhuma oferta encontrada' : 'No offers found'}</h3>
             <p className="mt-2 text-gray-500">
-              Não há ofertas ativas que correspondam aos seus filtros. Tente ajustar os filtros ou volte mais tarde.
+              {language === 'pt' ? 'Nenhuma oferta foi encontrada com os filtros atuais.' : 'No offers were found with the current filters.'}
             </p>
           </div>
         ) : (
@@ -234,7 +244,7 @@ export default function OffersMarketplace() {
                             ? 'bg-green-100 text-green-800' 
                             : 'bg-blue-100 text-blue-800'
                         }`}>
-                          {offer.offer_type === 'VENDA' ? 'Venda' : 'Compra'}
+                          {offer.offer_type === 'VENDA' ? (language === 'pt' ? 'Venda' : 'Sell') : (language === 'pt' ? 'Compra' : 'Buy')}
                         </span>
                       </div>
                       <span className="text-sm font-medium text-gray-500">
@@ -254,21 +264,21 @@ export default function OffersMarketplace() {
                       
                       <div className="flex items-center text-sm text-gray-700">
                         <Calendar className="h-4 w-4 text-gray-400 mr-1" />
-                        <span>Válido até: {format(new Date(offer.valid_until), 'dd/MM/yyyy')}</span>
+                        <span>{language === 'pt' ? 'Válido até' : 'Valid until'}: {format(new Date(offer.valid_until), 'dd/MM/yyyy')}</span>
                       </div>
                       
                       {offer.latitude && offer.longitude && (
                         <div className="flex items-center text-sm text-gray-700">
                           <MapPin className="h-4 w-4 text-gray-400 mr-1" />
                           <span className="truncate">
-                            Localização: {parseFloat(offer.latitude).toFixed(2)}, {parseFloat(offer.longitude).toFixed(2)}
+                            {language === 'pt' ? 'Localização' : 'Location'}: {parseFloat(offer.latitude).toFixed(2)}, {parseFloat(offer.longitude).toFixed(2)}
                           </span>
                         </div>
                       )}
                       
                       {offer.technical_specs && (
                         <div className="mt-2">
-                          <h4 className="text-sm font-medium text-gray-700">Especificações Técnicas:</h4>
+                          <h4 className="text-sm font-medium text-gray-700">{language === 'pt' ? 'Especificações técnicas' : 'Technical specifications'}</h4>
                           <p className="text-sm text-gray-600 mt-1">
                             {offer.technical_specs.length > 100 
                               ? `${offer.technical_specs.substring(0, 100)}...` 
@@ -280,12 +290,12 @@ export default function OffersMarketplace() {
                       <div className="flex items-center text-sm text-gray-700 space-x-4">
                         {offer.is_gmo && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                            GMO
+                            {language === 'pt' ? 'OGM' : 'GMO'}
                           </span>
                         )}
                         {offer.is_human_consumption && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                            Consumo Humano
+                            {language === 'pt' ? 'Consumo humano' : 'Human consumption'}
                           </span>
                         )}
                       </div>
@@ -300,12 +310,12 @@ export default function OffersMarketplace() {
                         {interestLoading === offer.id ? (
                           <>
                             <RefreshCw className="animate-spin h-4 w-4 mr-2" />
-                            Processando...
+                            {language === 'pt' ? 'Processando...' : 'Processing...'}
                           </>
                         ) : (
                           <>
                             <MessageCircle className="h-4 w-4 mr-2" />
-                            Tenho Interesse
+                            {language === 'pt' ? 'Estou interessado' : 'I am interested'}
                           </>
                         )}
                       </button>
@@ -317,14 +327,14 @@ export default function OffersMarketplace() {
 
             {/* Map Section */}
             <div className="mt-12">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Mapa de Ofertas</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">{language === 'pt' ? 'Mapa de ofertas' : 'Offers map'}</h2>
               <OffersMap offers={offers} onMarkerClick={handleMarkerClick} />
             </div>
 
             {/* Show more offers if there are more than 9 */}
             {offers.length > 9 && (
               <div className="mt-12">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Mais Ofertas</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">{language === 'pt' ? 'Mais ofertas' : 'More offers'}</h2>
                 <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                   {offers.slice(9).map((offer) => (
                     <div 
@@ -343,7 +353,7 @@ export default function OffersMarketplace() {
                                 ? 'bg-green-100 text-green-800' 
                                 : 'bg-blue-100 text-blue-800'
                             }`}>
-                              {offer.offer_type === 'VENDA' ? 'Venda' : 'Compra'}
+                              {offer.offer_type === 'VENDA' ? (language === 'pt' ? 'Venda' : 'Sell') : (language === 'pt' ? 'Compra' : 'Buy')}
                             </span>
                           </div>
                           <span className="text-sm font-medium text-gray-500">
@@ -363,14 +373,14 @@ export default function OffersMarketplace() {
                           
                           <div className="flex items-center text-sm text-gray-700">
                             <Calendar className="h-4 w-4 text-gray-400 mr-1" />
-                            <span>Válido até: {format(new Date(offer.valid_until), 'dd/MM/yyyy')}</span>
+                            <span>{language === 'pt' ? 'Válido até' : 'Valid until'}: {format(new Date(offer.valid_until), 'dd/MM/yyyy')}</span>
                           </div>
                           
                           {offer.latitude && offer.longitude && (
                             <div className="flex items-center text-sm text-gray-700">
                               <MapPin className="h-4 w-4 text-gray-400 mr-1" />
                               <span className="truncate">
-                                Localização: {parseFloat(offer.latitude).toFixed(2)}, {parseFloat(offer.longitude).toFixed(2)}
+                                {language === 'pt' ? 'Localização' : 'Location'}: {parseFloat(offer.latitude).toFixed(2)}, {parseFloat(offer.longitude).toFixed(2)}
                               </span>
                             </div>
                           )}
@@ -378,12 +388,12 @@ export default function OffersMarketplace() {
                           <div className="flex items-center text-sm text-gray-700 space-x-4">
                             {offer.is_gmo && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                GMO
+                                {language === 'pt' ? 'OGM' : 'GMO'}
                               </span>
                             )}
                             {offer.is_human_consumption && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                Consumo Humano
+                                {language === 'pt' ? 'Consumo humano' : 'Human consumption'}
                               </span>
                             )}
                           </div>
@@ -398,12 +408,12 @@ export default function OffersMarketplace() {
                             {interestLoading === offer.id ? (
                               <>
                                 <RefreshCw className="animate-spin h-4 w-4 mr-2" />
-                                Processando...
+                                {language === 'pt' ? 'Processando...' : 'Processing...'}
                               </>
                             ) : (
                               <>
                                 <MessageCircle className="h-4 w-4 mr-2" />
-                                Tenho Interesse
+                                {language === 'pt' ? 'Estou interessado' : 'I am interested'}
                               </>
                             )}
                           </button>

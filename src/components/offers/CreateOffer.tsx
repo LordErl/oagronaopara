@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { MapPin, Calendar, Globe, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MapPin, Calendar, Globe, X, Search, MapIcon, Loader2 } from 'lucide-react';
 import { createCommodity } from '../../lib/api';
 import { supabase } from '../../lib/supabase';
 import type { Commodity } from '../../lib/types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const commodities = [
   { cod_comm: 1, name: 'Milho Amarelo GMO Consumo Humano' },
@@ -31,6 +32,7 @@ interface CreateOfferProps {
 }
 
 export default function CreateOffer({ onClose }: CreateOfferProps) {
+  const { t, language } = useLanguage();
   const [location, setLocation] = useState({ latitude: '', longitude: '' });
   const [formData, setFormData] = useState<Omit<Commodity, 'id'>>({
     cod_comm: 0,
@@ -54,6 +56,13 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
     is_human_consumption: false,
     consider_other_locations: false
   });
+
+  // Estados para a funcionalidade de localização
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [mapCenter, setMapCenter] = useState({ lat: -15.7801, lng: -47.9292 }); // Brasília como centro padrão
 
   // Estado para controlar a exibição das moedas adicionais
   const [showAdditionalCurrencies, setShowAdditionalCurrencies] = useState(false);
@@ -91,6 +100,8 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
             latitude: newLocation.latitude,
             longitude: newLocation.longitude
           }));
+          // Atualizar o centro do mapa com a localização atual
+          setMapCenter({ lat: position.coords.latitude, lng: position.coords.longitude });
         },
         (error) => {
           console.error('Error getting location:', error);
@@ -98,6 +109,73 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
       );
     }
   }, []);
+
+  // Função para buscar municípios com base no termo de pesquisa
+  const searchMunicipalities = async (term: string) => {
+    if (term.length < 3) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      // Usando a API do Nominatim (OpenStreetMap) para buscar localizações
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(term)}&limit=5&countrycodes=br`);
+      const data = await response.json();
+      setSearchResults(data);
+    } catch (error) {
+      console.error('Error searching municipalities:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Função para selecionar uma localização dos resultados da pesquisa
+  const selectLocation = (result: any) => {
+    const newLocation = {
+      latitude: result.lat,
+      longitude: result.lon
+    };
+    setLocation(newLocation);
+    setFormData(prev => ({
+      ...prev,
+      latitude: newLocation.latitude,
+      longitude: newLocation.longitude
+    }));
+    setMapCenter({ lat: parseFloat(result.lat), lng: parseFloat(result.lon) });
+    setSearchResults([]);
+    setSearchTerm('');
+  };
+
+  // Função para usar a localização atual
+  const useCurrentLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const newLocation = {
+            latitude: position.coords.latitude.toString(),
+            longitude: position.coords.longitude.toString()
+          };
+          setLocation(newLocation);
+          setFormData(prev => ({
+            ...prev,
+            latitude: newLocation.latitude,
+            longitude: newLocation.longitude
+          }));
+          setMapCenter({ lat: position.coords.latitude, lng: position.coords.longitude });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+        }
+      );
+    }
+  };
+
+  // Função para alternar a exibição do mapa
+  const toggleMap = () => {
+    setShowMap(!showMap);
+  };
 
   const handleCommodityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const cod_comm = parseInt(e.target.value);
@@ -204,13 +282,13 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
             <X className="h-6 w-6" />
           </button>
 
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Nova Oferta</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">{t.createOfferTitle}</h2>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Commodity Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Commodity
+                {t.commodityLabel}
               </label>
               <select
                 value={formData.cod_comm}
@@ -218,7 +296,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
                 required
               >
-                <option value="">Selecione uma commodity</option>
+                <option value="">{language === 'pt' ? 'Selecione uma commodity' : 'Select a commodity'}</option>
                 {commodities.map(commodity => (
                   <option key={commodity.cod_comm} value={commodity.cod_comm}>
                     {commodity.name}
@@ -231,7 +309,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Quantidade
+                  {t.quantityLabel}
                 </label>
                 <input
                   type="number"
@@ -243,16 +321,16 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Unidade
+                  {t.unitLabel}
                 </label>
                 <select
                   value={formData.unit}
                   onChange={e => setFormData(prev => ({ ...prev, unit: e.target.value }))}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
                 >
-                  <option value="TON">Toneladas</option>
-                  <option value="KG">Quilogramas</option>
-                  <option value="SC">Sacas</option>
+                  <option value="TON">{language === 'pt' ? 'Toneladas' : 'Tons'}</option>
+                  <option value="KG">{language === 'pt' ? 'Quilogramas' : 'Kilograms'}</option>
+                  <option value="SC">{language === 'pt' ? 'Sacas' : 'Bags'}</option>
                 </select>
               </div>
             </div>
@@ -261,20 +339,20 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Tipo de Oferta
+                  {t.offerTypeLabel}
                 </label>
                 <select
                   value={formData.offer_type}
                   onChange={e => setFormData(prev => ({ ...prev, offer_type: e.target.value }))}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
                 >
-                  <option value="VENDA">Venda</option>
-                  <option value="COMPRA">Compra</option>
+                  <option value="VENDA">{language === 'pt' ? 'Venda' : 'Sale'}</option>
+                  <option value="COMPRA">{language === 'pt' ? 'Compra' : 'Purchase'}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Moeda
+                  {t.currencyLabel}
                 </label>
                 <select
                   value={formData.currency}
@@ -283,7 +361,11 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                 >
                   {currencies.map(currency => (
                     <option key={currency.code} value={currency.code}>
-                      {currency.code} - {currency.name}
+                      {currency.code} - {language === 'pt' ? currency.name : 
+                        currency.code === 'USD' ? 'US Dollar' : 
+                        currency.code === 'BRL' ? 'Brazilian Real' : 
+                        currency.code === 'EUR' ? 'Euro' : 
+                        'Chinese Yuan'}
                     </option>
                   ))}
                 </select>
@@ -293,7 +375,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
             {/* Price in selected currency */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Preço ({formData.currency})
+                {t.priceLabel} ({formData.currency})
               </label>
               <div className="mt-1 relative rounded-md shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -317,7 +399,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                 onClick={() => setShowAdditionalCurrencies(!showAdditionalCurrencies)}
                 className="text-sm text-green-600 hover:text-green-800 flex items-center"
               >
-                {showAdditionalCurrencies ? 'Esconder' : 'Mostrar'} preços em outras moedas
+                {showAdditionalCurrencies ? t.hidePricesInOtherCurrencies : t.showPricesInOtherCurrencies}
               </button>
             </div>
 
@@ -329,7 +411,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                   .map(currency => (
                     <div key={currency.code}>
                       <label className="block text-sm font-medium text-gray-700">
-                        Preço em {currency.code}
+                        {language === 'pt' ? `Preço em ${currency.code}` : `Price in ${currency.code}`}
                       </label>
                       <div className="mt-1 relative rounded-md shadow-sm">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -340,7 +422,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                           step="0.01"
                           value={formData[`price_${currency.code.toLowerCase()}` as keyof typeof formData] as number}
                           readOnly
-                          className="pl-10 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm"
+                          className="pl-10 block w-full rounded-md border-gray-300 bg-gray-50"
                         />
                       </div>
                     </div>
@@ -352,7 +434,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Validade da Oferta
+                  {t.validityLabel}
                 </label>
                 <div className="mt-1 relative rounded-md shadow-sm">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -369,7 +451,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Incoterms
+                  {t.incotermsLabel}
                 </label>
                 <select
                   value={formData.incoterms}
@@ -387,32 +469,120 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
             {/* Location */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Localização
+                {t.locationLabel}
               </label>
-              <div className="mt-1 grid grid-cols-2 gap-4">
-                <div className="relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <MapPin className="h-5 w-5 text-gray-400" />
+              
+              {/* Opções de localização */}
+              <div className="mt-2 flex flex-col space-y-4">
+                {/* Busca por município */}
+                <div className="relative">
+                  <div className="flex items-center">
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        searchMunicipalities(e.target.value);
+                      }}
+                      placeholder={t.searchPlaceholder}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                      <Search className="h-5 w-5 text-gray-400" />
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    value={location.latitude}
-                    placeholder="Latitude"
-                    readOnly
-                    className="pl-10 block w-full rounded-md border-gray-300 bg-gray-50"
-                  />
+                  
+                  {/* Resultados da busca */}
+                  {searchResults.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md border border-gray-200 max-h-60 overflow-auto">
+                      {searchResults.map((result, index) => (
+                        <div
+                          key={index}
+                          onClick={() => selectLocation(result)}
+                          className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                        >
+                          {result.display_name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {isSearching && (
+                    <div className="mt-2 flex justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-green-600" />
+                    </div>
+                  )}
                 </div>
-                <div className="relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Globe className="h-5 w-5 text-gray-400" />
+                
+                {/* Botões de ação para localização */}
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={useCurrentLocation}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    <MapPin className="mr-2 h-4 w-4" />
+                    {t.useCurrentLocation}
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={toggleMap}
+                    className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    <MapIcon className="mr-2 h-4 w-4" />
+                    {t.selectOnMap}
+                  </button>
+                </div>
+                
+                {/* Mapa para seleção de localização */}
+                {showMap && (
+                  <div className="mt-2 border border-gray-300 rounded-md p-2">
+                    <div className="h-64 bg-gray-200 rounded flex items-center justify-center">
+                      <p className="text-gray-500 text-center">
+                        {language === 'pt' 
+                          ? 'Componente de mapa seria renderizado aqui. Em produção, use uma biblioteca como Google Maps, Leaflet ou Mapbox.' 
+                          : 'Map component would be rendered here. In production, use a library like Google Maps, Leaflet, or Mapbox.'}
+                      </p>
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowMap(false)}
+                        className="inline-flex items-center px-3 py-2 border border-green-600 shadow-sm text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      >
+                        {t.confirmLocation}
+                      </button>
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    value={location.longitude}
-                    placeholder="Longitude"
-                    readOnly
-                    className="pl-10 block w-full rounded-md border-gray-300 bg-gray-50"
-                  />
+                )}
+                
+                {/* Exibição das coordenadas atuais */}
+                <div className="mt-1 grid grid-cols-2 gap-4">
+                  <div className="relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <MapPin className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={location.latitude}
+                      placeholder={t.latitude}
+                      readOnly
+                      className="pl-10 block w-full rounded-md border-gray-300 bg-gray-50"
+                    />
+                  </div>
+                  <div className="relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Globe className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      value={location.longitude}
+                      placeholder={t.longitude}
+                      readOnly
+                      className="pl-10 block w-full rounded-md border-gray-300 bg-gray-50"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -420,7 +590,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
             {/* Technical Specifications */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Ficha Técnica
+                {t.technicalSpecsLabel}
               </label>
               <div className="mt-1">
                 <textarea
@@ -428,7 +598,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                   onChange={e => setFormData(prev => ({ ...prev, technical_specs: e.target.value }))}
                   rows={3}
                   className="shadow-sm block w-full focus:ring-green-500 focus:border-green-500 sm:text-sm border border-gray-300 rounded-md"
-                  placeholder="Especificações técnicas do produto..."
+                  placeholder={language === 'pt' ? "Especificações técnicas do produto..." : "Product technical specifications..."}
                 />
               </div>
             </div>
@@ -454,7 +624,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                   className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
                 />
                 <label className="ml-2 block text-sm text-gray-900">
-                  Consumo Humano
+                  {language === 'pt' ? 'Consumo Humano' : 'Human Consumption'}
                 </label>
               </div>
               <div className="flex items-center">
@@ -465,7 +635,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                   className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
                 />
                 <label className="ml-2 block text-sm text-gray-900">
-                  Considerar Outros Locais
+                  {language === 'pt' ? 'Considerar Outros Locais' : 'Consider Other Locations'}
                 </label>
               </div>
             </div>
@@ -475,7 +645,7 @@ export default function CreateOffer({ onClose }: CreateOfferProps) {
                 type="submit"
                 className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
-                Criar Oferta
+                {t.createOfferButton}
               </button>
             </div>
           </form>

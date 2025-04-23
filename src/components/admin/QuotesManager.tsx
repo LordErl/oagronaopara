@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { RefreshCw, AlertTriangle, CheckCircle, X, Plus, Edit2, TrendingUp, TrendingDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { RefreshCw, AlertTriangle, CheckCircle, X, Plus, TrendingUp, TrendingDown, Bot, BarChart } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { analyzeQuotes } from '../../services/openai';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface QuoteSuggestion {
   commodity_name: string;
@@ -95,6 +98,10 @@ function QuotesManager() {
   const [fetchingSuggestions, setFetchingSuggestions] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [message, setMessage] = useState<{type: 'success' | 'error' | 'info' | null, text: string}>({type: null, text: ''});
+  const [analysis, setAnalysis] = useState<{analysis: string, generated_at: string} | null>(null);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [generatingAnalysis, setGeneratingAnalysis] = useState(false);
 
   useEffect(() => {
     fetchQuotes();
@@ -169,6 +176,42 @@ function QuotesManager() {
     }
   }
 
+  async function handleGenerateAnalysis() {
+    setGeneratingAnalysis(true);
+    setMessage({ type: 'info', text: 'Gerando análise de cotações...' });
+    
+    try {
+      // Obter as cotações mais recentes
+      const recentQuotes = quotes.slice(0, 10); // Últimas 10 cotações
+      
+      if (recentQuotes.length === 0) {
+        setMessage({ type: 'error', text: 'Não há cotações disponíveis para análise.' });
+        setGeneratingAnalysis(false);
+        return;
+      }
+      
+      // Gerar análise
+      const quoteAnalysis = await analyzeQuotes(recentQuotes);
+      
+      // Salvar análise no banco de dados
+      const { error } = await supabase
+        .from('quote_analyses')
+        .insert([quoteAnalysis])
+        .select();
+      
+      if (error) throw error;
+      
+      setAnalysis(quoteAnalysis);
+      setShowAnalysis(true);
+      setMessage({ type: 'success', text: 'Análise gerada com sucesso!' });
+    } catch (error) {
+      console.error('Erro ao gerar análise:', error);
+      setMessage({ type: 'error', text: 'Erro ao gerar análise de cotações.' });
+    } finally {
+      setGeneratingAnalysis(false);
+    }
+  }
+
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <div className="flex justify-between items-center mb-6">
@@ -188,6 +231,23 @@ function QuotesManager() {
               <>
                 <Plus className="h-4 w-4 mr-2" />
                 Buscar Novas Cotações
+              </>
+            )}
+          </button>
+          <button
+            onClick={handleGenerateAnalysis}
+            disabled={generatingAnalysis || quotes.length === 0}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          >
+            {generatingAnalysis ? (
+              <>
+                <Bot className="animate-spin h-4 w-4 mr-2" />
+                Gerando Análise...
+              </>
+            ) : (
+              <>
+                <BarChart className="h-4 w-4 mr-2" />
+                Gerar Análise de Mercado
               </>
             )}
           </button>
@@ -223,6 +283,47 @@ function QuotesManager() {
           <button onClick={() => setErrorMessage('')}>
             <X className="h-5 w-5" />
           </button>
+        </div>
+      )}
+
+      {message.type && (
+        <div className={`mb-4 p-4 ${
+          message.type === 'success' ? 'bg-green-100 text-green-800' : 
+          message.type === 'error' ? 'bg-red-100 text-red-800' : 
+          'bg-blue-100 text-blue-800'
+        } rounded-md flex items-center justify-between`}>
+          <div className="flex items-center">
+            {message.type === 'success' ? <CheckCircle className="h-5 w-5 mr-2" /> : 
+             message.type === 'error' ? <AlertTriangle className="h-5 w-5 mr-2" /> : 
+             <RefreshCw className="h-5 w-5 mr-2" />}
+            {message.text}
+          </div>
+          <button onClick={() => setMessage({type: null, text: ''})}>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+
+      {/* Market Analysis */}
+      {showAnalysis && analysis && (
+        <div className="mt-6 mb-8 p-4 bg-gray-50 rounded-lg border">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-lg font-semibold">Análise de Mercado</h3>
+            <button 
+              onClick={() => setShowAnalysis(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <p className="text-sm text-gray-500 mb-2">
+            Gerada em: {format(new Date(analysis.generated_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+          </p>
+          <div className="prose prose-sm max-w-none">
+            {analysis.analysis.split('\n').map((paragraph, idx) => (
+              <p key={idx}>{paragraph}</p>
+            ))}
+          </div>
         </div>
       )}
 

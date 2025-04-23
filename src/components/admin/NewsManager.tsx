@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, AlertTriangle, CheckCircle, X, Plus, Edit2, Globe, Calendar } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle, X, Plus, Edit2, Globe, Calendar, Bot } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { processNews } from '../../services/openai';
 
 interface NewsItem {
   id: string;
@@ -26,6 +27,7 @@ export default function NewsManager() {
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [message, setMessage] = useState<{type: 'success' | 'error' | 'info' | null, text: string}>({type: null, text: ''});
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -129,6 +131,52 @@ export default function NewsManager() {
       setErrorMessage(err.message);
     }
   }
+
+  const handleAutoFetchNews = async () => {
+    setLoading(true);
+    setMessage({ type: 'info', text: 'Buscando notícias automaticamente...' });
+    
+    try {
+      // Lista de fontes de notícias agrícolas
+      const newsSources = [
+        'https://www.noticiasagricolas.com.br/noticias/agronegocio/',
+        'https://www.canalrural.com.br/noticias/',
+        'https://www.agrolink.com.br/noticias'
+      ];
+      
+      // Escolher uma fonte aleatória para este exemplo
+      const randomSource = newsSources[Math.floor(Math.random() * newsSources.length)];
+      
+      // Processar a notícia
+      const processedNews = await processNews(randomSource);
+      
+      // Inserir no banco de dados
+      const { error } = await supabase
+        .from('agro_news')
+        .insert([{
+          title: processedNews.title,
+          content: processedNews.content,
+          original_title: processedNews.original_title,
+          original_content: processedNews.original_content,
+          source_url: processedNews.source_url,
+          source_name: 'Fonte Automática',
+          image_url: 'https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
+          published_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        }]);
+      
+      if (error) throw error;
+      
+      // Recarregar notícias
+      fetchNews();
+      setMessage({ type: 'success', text: 'Notícia adicionada automaticamente com sucesso!' });
+    } catch (error) {
+      console.error('Erro ao buscar notícias automaticamente:', error);
+      setMessage({ type: 'error', text: 'Erro ao buscar notícias automaticamente.' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   function openEditModal(newsItem: NewsItem) {
     setSelectedNews(newsItem);
@@ -261,6 +309,14 @@ export default function NewsManager() {
             Nova Notícia
           </button>
           <button
+            onClick={handleAutoFetchNews}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            disabled={loading}
+          >
+            <Bot className="h-4 w-4 mr-2" />
+            Buscar Notícias Automaticamente
+          </button>
+          <button
             onClick={fetchNews}
             className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
           >
@@ -289,6 +345,24 @@ export default function NewsManager() {
             {errorMessage}
           </div>
           <button onClick={() => setErrorMessage('')}>
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      )}
+
+      {message.type && (
+        <div className={`mb-4 p-4 ${
+          message.type === 'success' ? 'bg-green-100 text-green-800' : 
+          message.type === 'error' ? 'bg-red-100 text-red-800' : 
+          'bg-blue-100 text-blue-800'
+        } rounded-md flex items-center justify-between`}>
+          <div className="flex items-center">
+            {message.type === 'success' ? <CheckCircle className="h-5 w-5 mr-2" /> : 
+             message.type === 'error' ? <AlertTriangle className="h-5 w-5 mr-2" /> : 
+             <RefreshCw className="h-5 w-5 mr-2" />}
+            {message.text}
+          </div>
+          <button onClick={() => setMessage({type: null, text: ''})}>
             <X className="h-5 w-5" />
           </button>
         </div>

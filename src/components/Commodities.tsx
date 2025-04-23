@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { fetchLatestQuotes } from '../lib/api';
 import type { CommodityQuote } from '../lib/types';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function Commodities() {
+  const { t } = useLanguage();
   const [quotes, setQuotes] = useState<CommodityQuote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -16,7 +18,7 @@ export default function Commodities() {
         setQuotes(data);
       } catch (err) {
         console.error('Error fetching quotes:', err);
-        setError('Erro ao carregar cotações');
+        setError(t.errorLoadingQuotes || 'Erro ao carregar cotações');
       } finally {
         setLoading(false);
       }
@@ -26,7 +28,7 @@ export default function Commodities() {
     // Refresh quotes every 5 minutes
     const interval = setInterval(fetchQuotes, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [t]);
 
   if (loading) {
     return (
@@ -57,10 +59,10 @@ export default function Commodities() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
-            Cotações em Tempo Real
+            {t.commoditiesTitle}
           </h2>
           <p className="mt-3 max-w-2xl mx-auto text-xl text-gray-500 sm:mt-4">
-            Acompanhe as principais commodities do mercado internacional
+            {t.commoditiesSubtitle}
           </p>
         </div>
 
@@ -99,7 +101,7 @@ export default function Commodities() {
         </div>
 
         <div className="mt-8 text-center text-sm text-gray-500">
-          Última atualização: {new Date(quotes[0]?.fetched_at || Date.now()).toLocaleString()}
+          {t.lastUpdated || 'Última atualização'}: {new Date(quotes[0]?.fetched_at || Date.now()).toLocaleString()}
         </div>
       </div>
     </div>

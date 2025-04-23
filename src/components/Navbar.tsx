@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Leaf, Menu, X, Instagram, MessageCircle, Plus, Settings, ShoppingBag, Globe } from 'lucide-react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import SignupModal from './auth/SignupModal';
 import LoginModal from './auth/LoginModal';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface NavbarProps {
   onCreateOfferClick: () => void;
@@ -17,38 +18,9 @@ export default function Navbar({ onCreateOfferClick, onViewOffersClick, onHomeCl
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [language, setLanguage] = useState<'pt' | 'en'>('pt'); // Estado para controlar o idioma
+  const { language, t, toggleLanguage } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Textos traduzidos
-  const translations = {
-    pt: {
-      home: 'Início',
-      newOffer: 'Nova Oferta',
-      viewOffers: 'Ver Ofertas',
-      quotes: 'Cotações',
-      news: 'Notícias',
-      admin: 'Admin',
-      login: 'Entrar',
-      logout: 'Sair',
-      language: 'EN'
-    },
-    en: {
-      home: 'Home',
-      newOffer: 'New Offer',
-      viewOffers: 'View Offers',
-      quotes: 'Quotes',
-      news: 'News',
-      admin: 'Admin',
-      login: 'Login',
-      logout: 'Logout',
-      language: 'PT'
-    }
-  };
-
-  // Texto atual baseado no idioma selecionado
-  const t = translations[language];
 
   useEffect(() => {
     // Check auth state
@@ -68,12 +40,6 @@ export default function Navbar({ onCreateOfferClick, onViewOffersClick, onHomeCl
         setIsAdmin(false);
       }
     });
-
-    // Carregar preferência de idioma do localStorage, se existir
-    const savedLanguage = localStorage.getItem('language') as 'pt' | 'en';
-    if (savedLanguage) {
-      setLanguage(savedLanguage);
-    }
 
     return () => subscription.unsubscribe();
   }, []);
@@ -154,13 +120,6 @@ export default function Navbar({ onCreateOfferClick, onViewOffersClick, onHomeCl
   const handleAdminClick = () => {
     navigate('/admin');
     setIsOpen(false);
-  };
-
-  // Função para alternar o idioma
-  const toggleLanguage = () => {
-    const newLanguage = language === 'pt' ? 'en' : 'pt';
-    setLanguage(newLanguage);
-    localStorage.setItem('language', newLanguage);
   };
 
   return (
