@@ -1,6 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { createClient } from '@supabase/supabase-js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -33,15 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const data = await openaiRes.json();
-    // Extrai apenas o conteúdo da resposta
     const content = data.choices?.[0]?.message?.content?.trim();
 
-    // Tenta fazer parse do JSON retornado pelo modelo
     let noticias = [];
     try {
       noticias = JSON.parse(content);
     } catch (e) {
-      // Tenta extrair JSON de resposta "suja"
       const match = content.match(/\[.*\]/s);
       if (match) {
         noticias = JSON.parse(match[0]);
@@ -50,7 +52,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    return res.status(200).json({ noticias });
+    // Inserir notícias no Supabase
+    const results = [];
+    for (const noticia of noticias) {
+      const { error } = await supabase.from('agro_news').insert([{
+        title: noticia.titulo,
+        content: noticia.resumo,
+        source_url: noticia.url_fonte,
+        source_name: noticia.nome_fonte,
+        image_url: noticia.url_imagem,
+        published_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        approved: false
+      }]);
+      results.push({ noticia, error });
+    }
+
+    return res.status(200).json({ inserted: results });
   } catch (error) {
     return res.status(500).json({ error: 'Erro ao buscar notícias', details: error });
   }
