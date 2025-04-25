@@ -35,6 +35,12 @@ export default function NewsManager() {
     source_name: '',
     image_url: '',
   });
+  const [newsFilter, setNewsFilter] = useState<'all' | 'pending' | 'approved'>('all');
+  const filteredNews = newsFilter === 'all'
+    ? news
+    : newsFilter === 'pending'
+      ? news.filter(n => !n.approved)
+      : news.filter(n => n.approved);
 
   useEffect(() => {
     fetchNews();
@@ -46,7 +52,6 @@ export default function NewsManager() {
       const { data, error } = await supabase
         .from('agro_news')
         .select('*')
-        .eq('approved', true)
         .order('published_at', { ascending: false });
 
       if (error) throw error;
@@ -310,6 +315,12 @@ export default function NewsManager() {
           </button>
         </div>
       </div>
+      {/* Filtros modernos */}
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setNewsFilter('all')} className={`px-3 py-1 rounded-full text-sm font-medium border ${newsFilter === 'all' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-700 border-gray-300'}`}>Todas</button>
+        <button onClick={() => setNewsFilter('pending')} className={`px-3 py-1 rounded-full text-sm font-medium border ${newsFilter === 'pending' ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 border-gray-300'}`}>Não aprovadas</button>
+        <button onClick={() => setNewsFilter('approved')} className={`px-3 py-1 rounded-full text-sm font-medium border ${newsFilter === 'approved' ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-700 border-gray-300'}`}>Aprovadas</button>
+      </div>
 
       {successMessage && (
         <div className="mb-4 p-4 bg-green-100 text-green-800 rounded-md flex items-center justify-between">
@@ -359,8 +370,8 @@ export default function NewsManager() {
         </div>
       ) : (
         <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {news.map((item) => (
-            <div key={item.id} className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
+          {filteredNews.map((item) => (
+            <div key={item.id} className={`overflow-hidden shadow rounded-lg border transition-all duration-200 ${!item.approved ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'}`}>
               <div className="relative h-48">
                 <img
                   src={item.image_url}
@@ -370,9 +381,15 @@ export default function NewsManager() {
                     e.currentTarget.src = 'https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80';
                   }}
                 />
+                {!item.approved && (
+                  <span className="absolute top-2 left-2 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded shadow">Aguardando aprovação</span>
+                )}
               </div>
               <div className="p-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">{item.title}</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2 flex items-center">
+                  {item.title}
+                  {!item.approved && <span className="ml-2 inline-block bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full font-semibold">Não aprovada</span>}
+                </h3>
                 <p className="text-sm text-gray-500 mb-4 line-clamp-3">{item.content}</p>
                 <div className="flex items-center text-sm text-gray-500 mb-4">
                   <Globe className="h-4 w-4 mr-1" />
@@ -386,22 +403,16 @@ export default function NewsManager() {
                 </div>
                 <div className="mt-4 flex justify-end space-x-2">
                   {!item.approved && (
-                    <button onClick={() => handleApproveNews(item.id)} className="text-green-600 hover:text-green-900 border border-green-600 rounded px-2 py-1 text-xs font-semibold">Aprovar</button>
+                    <button onClick={() => handleApproveNews(item.id)} className="text-white bg-green-600 hover:bg-green-700 border border-green-700 rounded px-3 py-1 text-xs font-semibold shadow">Aprovar</button>
                   )}
-                  <button onClick={() => openEditModal(item)} className="text-indigo-600 hover:text-indigo-900">
-                    <Edit2 className="h-5 w-5" />
-                  </button>
-                  <button onClick={() => handleDeleteNews(item.id)} className="text-red-600 hover:text-red-900">
-                    <X className="h-5 w-5" />
-                  </button>
+                  <button onClick={() => openEditModal(item)} className="text-indigo-600 hover:text-indigo-900 border border-indigo-600 rounded px-2 py-1 text-xs font-semibold">Editar</button>
+                  <button onClick={() => handleDeleteNews(item.id)} className="text-white bg-red-600 hover:bg-red-700 border border-red-700 rounded px-2 py-1 text-xs font-semibold">Excluir</button>
                 </div>
-                {!item.approved && <div className="mt-2 text-xs text-orange-600 font-semibold">Aguardando aprovação</div>}
               </div>
             </div>
           ))}
         </div>
       )}
-
       {showAddModal && <NewsModal onSubmit={handleAddNews} isEdit={false} />}
       {showEditModal && <NewsModal onSubmit={handleEditNews} isEdit={true} />}
     </div>
