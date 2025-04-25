@@ -30,45 +30,65 @@ export async function runDailyTasks() {
 // Função para buscar notícias diárias
 async function fetchDailyNews() {
   try {
-    // Escolher 3 fontes aleatórias (ou menos se a lista for menor)
-    const shuffled = [...NEWS_SOURCES].sort(() => 0.5 - Math.random());
-    const selectedSources = shuffled.slice(0, Math.min(3, NEWS_SOURCES.length));
-    
-    for (const source of selectedSources) {
-      const processedNews = await processNews(source);
-      
-      // Verificar se a notícia já existe (pelo título ou URL)
-      const { data: existingNews } = await supabase
-        .from('news')
-        .select('id')
-        .or(`title.eq.${processedNews.title},source_url.eq.${processedNews.source_url}`)
-        .limit(1);
-      
-      if (existingNews && existingNews.length > 0) {
-        console.log('Notícia já existe, pulando:', processedNews.title);
-        continue;
-      }
-      
-      // Inserir nova notícia
-      const { error } = await supabase
-        .from('news')
-        .insert([{
-          title: processedNews.title,
-          content: processedNews.content,
-          original_title: processedNews.original_title,
-          original_content: processedNews.original_content,
-          source_url: processedNews.source_url,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }]);
-      
-      if (error) throw error;
-      console.log('Notícia adicionada com sucesso:', processedNews.title);
+    // Buscar notícias via OpenAI (igual ao endpoint fetch-news)
+    const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+    const prompt = `MARAVILHOSO DIA!!! Preciso que você atue como um minerador de notícias do setor agro mundial, focando em informações relevantes para exportadores e importadores de commodities no Brasil. Por favor, me retorne EXATAMENTE 5 notícias, cada uma no seguinte formato JSON:\n\n[\n  {\n    "titulo": "...",\n    "resumo": "...",\n    "url_fonte": "...",\n    "nome_fonte": "...",\n    "url_imagem": "..."\n  }\n]\n\nO resumo deve ser claro e objetivo (máx. 3 frases). As imagens devem ser públicas e de alta resolução, relacionadas ao tema da notícia. Apenas retorne o array JSON, sem comentários ou texto adicional.`;
+
+    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 1200,
+        temperature: 0.7,
+      }),
+      redirect: 'follow',
+    });
+
+    if (!openaiRes.ok) {
+      const err = await openaiRes.text();
+      throw new Error('Erro ao consultar OpenAI: ' + err);
     }
-    
+
+    const data = await openaiRes.json();
+    const content = data.choices?.[0]?.message?.content?.trim();
+    let noticias = [];
+    try {
+      noticias = JSON.parse(content);
+    } catch {
+      // fallback para tentar encontrar o JSON
+      const match = content.match(/\[.*\]/s);
+      if (match) noticias = JSON.parse(match[0]);
+    }
+
+    for (const noticia of noticias) {
+      // Verifica se já existe notícia igual
+      const { data: existingNews } = await supabase
+        .from('agro_news')
+        .select('id')
+        .or(`title.eq.${noticia.titulo},source_url.eq.${noticia.url_fonte}`)
+        .limit(1);
+      if (existingNews && existingNews.length > 0) continue;
+      await supabase.from('agro_news').insert([{
+        title: noticia.titulo,
+        content: noticia.resumo,
+        source_url: noticia.url_fonte,
+        source_name: noticia.nome_fonte,
+        image_url: noticia.url_imagem,
+        published_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        approved: false
+      }]);
+    }
     return { success: true };
   } catch (error) {
-    console.error('Erro ao buscar notícias diárias:', error);
+    console.error('Erro ao buscar notícias automaticamente via OpenAI:', error);
     throw error;
   }
 }
