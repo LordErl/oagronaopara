@@ -3,7 +3,6 @@ import { RefreshCw, AlertTriangle, CheckCircle, X, Plus, Edit2, Globe, Calendar,
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { processNews } from '../../services/openai';
 
 interface NewsItem {
   id: string;
@@ -133,42 +132,13 @@ export default function NewsManager() {
   async function handleAutoFetchNews() {
     setLoading(true);
     setMessage({ type: 'info', text: 'Buscando notícias automaticamente...' });
-    
     try {
-      // Lista de fontes de notícias agrícolas
-      const newsSources = [
-        'https://www.noticiasagricolas.com.br/noticias/agronegocio/',
-        'https://www.canalrural.com.br/noticias/',
-        'https://www.agrolink.com.br/noticias'
-      ];
-      
-      // Escolher uma fonte aleatória para este exemplo
-      const randomSource = newsSources[Math.floor(Math.random() * newsSources.length)];
-      
-      // Processar a notícia
-      const processedNews = await processNews(randomSource);
-      
-      // Inserir no banco de dados
-      const { error } = await supabase
-        .from('agro_news')
-        .insert([{
-          title: processedNews.title,
-          content: processedNews.content,
-          original_title: processedNews.original_title,
-          original_content: processedNews.original_content,
-          source_url: processedNews.source_url,
-          source_name: 'Fonte Automática',
-          image_url: 'https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
-          published_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          approved: false
-        }]);
-      
-      if (error) throw error;
-      
-      // Recarregar notícias
-      fetchNews();
-      setMessage({ type: 'success', text: 'Notícia adicionada automaticamente com sucesso!' });
+      // Busca notícias via API própria (OpenAI)
+      const res = await fetch('/api/fetch-news');
+      if (!res.ok) throw new Error('Erro ao buscar notícias da OpenAI');
+      // Opcional: pode retornar as notícias inseridas, mas vamos apenas recarregar
+      await fetchNews();
+      setMessage({ type: 'success', text: 'Notícias buscadas automaticamente com sucesso!' });
     } catch (error) {
       console.error('Erro ao buscar notícias automaticamente:', error);
       setMessage({ type: 'error', text: 'Erro ao buscar notícias automaticamente.' });
