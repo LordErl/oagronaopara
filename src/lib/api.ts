@@ -22,6 +22,7 @@ export async function fetchLatestNews(): Promise<AgroNews[]> {
     const { data, error } = await supabase
       .from('agro_news')
       .select('*')
+      .eq('approved', true)
       .order('published_at', { ascending: false })
       .limit(6);
 

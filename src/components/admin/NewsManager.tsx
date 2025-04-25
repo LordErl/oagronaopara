@@ -17,6 +17,7 @@ interface NewsItem {
   published_at: string;
   translated_at: string;
   created_at: string;
+  approved: boolean;
 }
 
 export default function NewsManager() {
@@ -46,6 +47,7 @@ export default function NewsManager() {
       const { data, error } = await supabase
         .from('agro_news')
         .select('*')
+        .eq('approved', true)
         .order('published_at', { ascending: false });
 
       if (error) throw error;
@@ -63,11 +65,7 @@ export default function NewsManager() {
     try {
       const { data, error } = await supabase
         .from('agro_news')
-        .insert([{
-          ...formData,
-          published_at: new Date().toISOString(),
-          created_at: new Date().toISOString()
-        }])
+        .insert([{ ...formData, published_at: new Date().toISOString(), created_at: new Date().toISOString(), approved: false }])
         .select()
         .single();
 
@@ -132,7 +130,7 @@ export default function NewsManager() {
     }
   }
 
-  const handleAutoFetchNews = async () => {
+  async function handleAutoFetchNews() {
     setLoading(true);
     setMessage({ type: 'info', text: 'Buscando notícias automaticamente...' });
     
@@ -162,7 +160,8 @@ export default function NewsManager() {
           source_name: 'Fonte Automática',
           image_url: 'https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80',
           published_at: new Date().toISOString(),
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          approved: false
         }]);
       
       if (error) throw error;
@@ -177,6 +176,22 @@ export default function NewsManager() {
       setLoading(false);
     }
   };
+
+  async function handleApproveNews(id: string) {
+    try {
+      const { data, error } = await supabase
+        .from('agro_news')
+        .update({ approved: true })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      setNews(news.map(n => n.id === id ? { ...n, approved: true } : n));
+      setSuccessMessage('Notícia aprovada com sucesso!');
+    } catch (err: any) {
+      setErrorMessage('Erro ao aprovar notícia: ' + err.message);
+    }
+  }
 
   function openEditModal(newsItem: NewsItem) {
     setSelectedNews(newsItem);
@@ -400,19 +415,17 @@ export default function NewsManager() {
                   {format(new Date(item.published_at), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                 </div>
                 <div className="mt-4 flex justify-end space-x-2">
-                  <button
-                    onClick={() => openEditModal(item)}
-                    className="text-indigo-600 hover:text-indigo-900"
-                  >
+                  {!item.approved && (
+                    <button onClick={() => handleApproveNews(item.id)} className="text-green-600 hover:text-green-900 border border-green-600 rounded px-2 py-1 text-xs font-semibold">Aprovar</button>
+                  )}
+                  <button onClick={() => openEditModal(item)} className="text-indigo-600 hover:text-indigo-900">
                     <Edit2 className="h-5 w-5" />
                   </button>
-                  <button
-                    onClick={() => handleDeleteNews(item.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
+                  <button onClick={() => handleDeleteNews(item.id)} className="text-red-600 hover:text-red-900">
                     <X className="h-5 w-5" />
                   </button>
                 </div>
+                {!item.approved && <div className="mt-2 text-xs text-orange-600 font-semibold">Aguardando aprovação</div>}
               </div>
             </div>
           ))}
