@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, AlertTriangle, CheckCircle, X, Plus, Edit2, Globe, Calendar, Bot } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle, X, Plus, Globe, Calendar, Bot } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -138,15 +138,56 @@ export default function NewsManager() {
     setLoading(true);
     setMessage({ type: 'info', text: 'Buscando notícias automaticamente...' });
     try {
-      // Busca notícias via API própria (OpenAI)
       const res = await fetch('/api/fetch-news');
       if (!res.ok) throw new Error('Erro ao buscar notícias da OpenAI');
-      // Opcional: pode retornar as notícias inseridas, mas vamos apenas recarregar
-      await fetchNews();
-      setMessage({ type: 'success', text: 'Notícias buscadas automaticamente com sucesso!' });
+      
+      const data = await res.json();
+      
+      if (data.error) {
+        throw new Error(`${data.error}: ${JSON.stringify(data.details)}`);
+      }
+
+      // Se temos o resumo, vamos usar para uma mensagem mais detalhada
+      if (data.summary) {
+        const { success, error } = data.summary;
+        
+        if (success === 0) {
+          throw new Error('Nenhuma notícia foi inserida com sucesso');
+        }
+
+        // Recarrega as notícias
+        await fetchNews();
+        
+        if (error > 0) {
+          setMessage({ 
+            type: 'info', 
+            text: `${success} notícias inseridas com sucesso, ${error} falhas.` 
+          });
+        } else {
+          setMessage({ 
+            type: 'success', 
+            text: `${success} notícias foram buscadas e inseridas com sucesso!` 
+          });
+        }
+      } else {
+        // Fallback para o caso do formato antigo da resposta
+        const insertErrors = data.inserted.filter((result: any) => result.error);
+        if (insertErrors.length > 0) {
+          throw new Error(`Erro ao inserir ${insertErrors.length} notícias no banco de dados`);
+        }
+        
+        await fetchNews();
+        setMessage({ 
+          type: 'success', 
+          text: `${data.inserted.length} notícias foram inseridas com sucesso!` 
+        });
+      }
     } catch (error) {
       console.error('Erro ao buscar notícias automaticamente:', error);
-      setMessage({ type: 'error', text: 'Erro ao buscar notícias automaticamente.' });
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Erro ao buscar notícias automaticamente.' 
+      });
     } finally {
       setLoading(false);
     }

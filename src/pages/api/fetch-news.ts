@@ -54,21 +54,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Inserir notícias no Supabase
     const results = [];
+    let successCount = 0;
+    let errorCount = 0;
+
     for (const noticia of noticias) {
-      const { error } = await supabase.from('agro_news').insert([{
-        title: noticia.titulo,
-        content: noticia.resumo,
-        source_url: noticia.url_fonte,
-        source_name: noticia.nome_fonte,
-        image_url: noticia.url_imagem,
-        published_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        approved: false
-      }]);
-      results.push({ noticia, error });
+      const { data, error } = await supabase
+        .from('agro_news')
+        .insert([{
+          title: noticia.titulo,
+          content: noticia.resumo,
+          source_url: noticia.url_fonte,
+          source_name: noticia.nome_fonte,
+          image_url: noticia.url_imagem,
+          published_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          approved: false
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        errorCount++;
+        console.error('Erro ao inserir notícia:', error);
+        results.push({ noticia, error: error.message, success: false });
+      } else {
+        successCount++;
+        results.push({ noticia, data, success: true });
+      }
     }
 
-    return res.status(200).json({ inserted: results });
+    if (errorCount === noticias.length) {
+      return res.status(500).json({ 
+        error: 'Falha ao inserir todas as notícias', 
+        details: results 
+      });
+    }
+
+    return res.status(200).json({ 
+      inserted: results,
+      summary: {
+        total: noticias.length,
+        success: successCount,
+        error: errorCount
+      }
+    });
   } catch (error) {
     return res.status(500).json({ error: 'Erro ao buscar notícias', details: error });
   }
