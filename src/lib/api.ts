@@ -1,5 +1,40 @@
 import { supabase } from './supabase';
-import type { Commodity, User, CommodityQuote, AgroNews } from './types';
+import type { Commodity, User, CommodityQuote } from './types';
+
+export interface AgroNews {
+  id: string;
+  title: string;
+  content: string;
+  original_title?: string;
+  original_content?: string;
+  source_url: string;
+  source_name: string;
+  image_url: string;
+  published_at: string;
+  translated_at?: string;
+  created_at: string;
+  approved: boolean;
+}
+
+export interface NewsResponse {
+  inserted: {
+    noticia: {
+      titulo: string;
+      resumo: string;
+      url_fonte: string;
+      nome_fonte: string;
+      url_imagem: string;
+    };
+    data?: AgroNews;
+    error?: string;
+    success: boolean;
+  }[];
+  summary: {
+    total: number;
+    success: number;
+    error: number;
+  };
+}
 
 export async function fetchLatestQuotes(): Promise<CommodityQuote[]> {
   try {
@@ -18,20 +53,13 @@ export async function fetchLatestQuotes(): Promise<CommodityQuote[]> {
 }
 
 export async function fetchLatestNews(): Promise<AgroNews[]> {
-  try {
-    const { data, error } = await supabase
-      .from('agro_news')
-      .select('*')
-      .eq('approved', true)
-      .order('published_at', { ascending: false })
-      .limit(6);
+  const { data, error } = await supabase
+    .from('agro_news')
+    .select('*')
+    .order('published_at', { ascending: false });
 
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.error('Error fetching news:', err);
-    return []; // Return empty array instead of throwing
-  }
+  if (error) throw error;
+  return data || [];
 }
 
 export async function fetchCommodities() {
@@ -238,4 +266,133 @@ export async function deleteExpiredOffers() {
     console.error('Error deleting expired offers:', err);
     return { success: false, error: err };
   }
+}
+
+export async function fetchNewsFromOpenAI(): Promise<NewsResponse> {
+  const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
+  
+  const prompt = `MARAVILHOSO DIA!!! Preciso que você atue como um minerador de notícias do setor agro mundial, focando em informações relevantes para exportadores e importadores de commodities no Brasil. Por favor, me retorne EXATAMENTE 5 notícias, cada uma no seguinte formato JSON:\n\n[\n  {\n    "titulo": "...",\n    "resumo": "...",\n    "url_fonte": "...",\n    "nome_fonte": "...",\n    "url_imagem": "..."\n  }\n]\n\nO resumo deve ser claro e objetivo (máx. 3 frases). As imagens devem ser públicas e de alta resolução, relacionadas ao tema da notícia. Apenas retorne o array JSON, sem comentários ou texto adicional.`;
+
+  const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1200,
+      temperature: 0.7,
+    }),
+  });
+
+  if (!openaiRes.ok) {
+    const err = await openaiRes.text();
+    throw new Error(`Erro ao consultar OpenAI: ${err}`);
+  }
+
+  const data = await openaiRes.json();
+  console.log('OpenAI Response:', data);
+  const content = data.choices?.[0]?.message?.content?.trim();
+  console.log('Parsed content:', content);
+
+  interface NewsItem {
+    titulo: string;
+    resumo: string;
+    url_fonte: string;
+    nome_fonte: string;
+    url_imagem: string;
+  }
+
+  let noticias: NewsItem[] = [];
+  try {
+    noticias = JSON.parse(content);
+    console.log('Parsed news:', noticias);
+  } catch (e) {
+    console.error('Error parsing JSON:', e);
+    const match = content.match(/\[.*\]/s);
+    if (match) {
+      noticias = JSON.parse(match[0]);
+      console.log('Parsed news from regex:', noticias);
+    } else {
+      console.error('No JSON array found in content');
+      throw new Error('Formato inesperado da resposta OpenAI');
+    }
+  }
+
+  if (!Array.isArray(noticias) || noticias.length === 0) {
+    console.error('Noticias não é um array válido:', noticias);
+    throw new Error('Nenhuma notícia foi retornada pela OpenAI');
+  }
+
+  const results: NewsResponse['inserted'] = [];
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (const noticia of noticias) {
+    console.log('Tentando inserir notícia:', noticia);
+    
+    if (!noticia.titulo || !noticia.resumo) {
+      console.error('Notícia com campos obrigatórios faltando:', noticia);
+      errorCount++;
+      results.push({ 
+        noticia, 
+        error: 'Campos obrigatórios faltando', 
+        success: false 
+      });
+      continue;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('agro_news')
+        .insert([{
+          title: noticia.titulo,
+          content: noticia.resumo,
+          source_url: noticia.url_fonte || '',
+          source_name: noticia.nome_fonte || 'OpenAI',
+          image_url: noticia.url_imagem || '',
+          published_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          approved: false
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erro Supabase ao inserir notícia:', error);
+        errorCount++;
+        results.push({ noticia, error: error.message, success: false });
+      } else {
+        console.log('Notícia inserida com sucesso:', data);
+        successCount++;
+        results.push({ noticia, data, success: true });
+      }
+    } catch (error) {
+      console.error('Erro ao inserir notícia:', error);
+      errorCount++;
+      results.push({ 
+        noticia, 
+        error: error instanceof Error ? error.message : 'Erro desconhecido', 
+        success: false 
+      });
+    }
+  }
+
+  if (errorCount === noticias.length) {
+    console.error('Todas as inserções falharam');
+    throw new Error('Falha ao inserir todas as notícias');
+  }
+
+  const response: NewsResponse = { 
+    inserted: results,
+    summary: {
+      total: noticias.length,
+      success: successCount,
+      error: errorCount
+    }
+  };
+  console.log('Resposta final:', response);
+  return response;
 }

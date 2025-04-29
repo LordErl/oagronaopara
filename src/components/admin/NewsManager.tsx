@@ -3,37 +3,34 @@ import { RefreshCw, AlertTriangle, CheckCircle, X, Plus, Globe, Calendar, Bot } 
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { fetchNewsFromOpenAI, fetchLatestNews } from '../../lib/api';
+import type { AgroNews } from '../../lib/api';
 
-interface NewsItem {
-  id: string;
-  title: string;
-  content: string;
-  original_title: string;
-  original_content: string;
-  source_url: string;
-  source_name: string;
-  image_url: string;
-  published_at: string;
-  translated_at: string;
-  created_at: string;
-  approved: boolean;
+interface Message {
+  type: 'success' | 'error' | 'info';
+  text: string;
 }
 
+type NewsFormData = Omit<AgroNews, 'id'>;
+
 export default function NewsManager() {
-  const [news, setNews] = useState<NewsItem[]>([]);
+  const [news, setNews] = useState<AgroNews[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
+  const [selectedNews, setSelectedNews] = useState<AgroNews | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [message, setMessage] = useState<{type: 'success' | 'error' | 'info' | null, text: string}>({type: null, text: ''});
-  const [formData, setFormData] = useState({
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
+  const [formData, setFormData] = useState<NewsFormData>({
     title: '',
     content: '',
     source_url: '',
     source_name: '',
     image_url: '',
+    published_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    approved: false,
   });
   const [newsFilter, setNewsFilter] = useState<'all' | 'pending' | 'approved'>('all');
   const filteredNews = newsFilter === 'all'
@@ -49,13 +46,8 @@ export default function NewsManager() {
   async function fetchNews() {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('agro_news')
-        .select('*')
-        .order('published_at', { ascending: false });
-
-      if (error) throw error;
-      setNews(data || []);
+      const data = await fetchLatestNews();
+      setNews(data);
     } catch (err) {
       console.error('Error fetching news:', err);
       setErrorMessage('Erro ao carregar notícias');
@@ -77,13 +69,7 @@ export default function NewsManager() {
 
       setNews([data, ...news]);
       setShowAddModal(false);
-      setFormData({
-        title: '',
-        content: '',
-        source_url: '',
-        source_name: '',
-        image_url: '',
-      });
+      resetForm();
       setSuccessMessage('Notícia adicionada com sucesso!');
     } catch (err: any) {
       console.error('Error adding news:', err);
@@ -138,48 +124,25 @@ export default function NewsManager() {
     setLoading(true);
     setMessage({ type: 'info', text: 'Buscando notícias automaticamente...' });
     try {
-      const res = await fetch('/api/fetch-news');
-      if (!res.ok) throw new Error('Erro ao buscar notícias da OpenAI');
+      // Busca e insere novas notícias via OpenAI
+      const response = await fetchNewsFromOpenAI();
       
-      const data = await res.json();
-      
-      if (data.error) {
-        throw new Error(`${data.error}: ${JSON.stringify(data.details)}`);
+      if (response.summary.success === 0) {
+        throw new Error('Nenhuma notícia foi inserida com sucesso');
       }
 
-      // Se temos o resumo, vamos usar para uma mensagem mais detalhada
-      if (data.summary) {
-        const { success, error } = data.summary;
-        
-        if (success === 0) {
-          throw new Error('Nenhuma notícia foi inserida com sucesso');
-        }
-
-        // Recarrega as notícias
-        await fetchNews();
-        
-        if (error > 0) {
-          setMessage({ 
-            type: 'info', 
-            text: `${success} notícias inseridas com sucesso, ${error} falhas.` 
-          });
-        } else {
-          setMessage({ 
-            type: 'success', 
-            text: `${success} notícias foram buscadas e inseridas com sucesso!` 
-          });
-        }
+      // Recarrega a lista de notícias do banco
+      await fetchNews();
+      
+      if (response.summary.error > 0) {
+        setMessage({ 
+          type: 'info', 
+          text: `${response.summary.success} notícias inseridas com sucesso, ${response.summary.error} falhas.` 
+        });
       } else {
-        // Fallback para o caso do formato antigo da resposta
-        const insertErrors = data.inserted.filter((result: any) => result.error);
-        if (insertErrors.length > 0) {
-          throw new Error(`Erro ao inserir ${insertErrors.length} notícias no banco de dados`);
-        }
-        
-        await fetchNews();
         setMessage({ 
           type: 'success', 
-          text: `${data.inserted.length} notícias foram inseridas com sucesso!` 
+          text: `${response.summary.success} notícias foram buscadas e inseridas com sucesso!` 
         });
       }
     } catch (error) {
@@ -209,7 +172,20 @@ export default function NewsManager() {
     }
   }
 
-  function openEditModal(newsItem: NewsItem) {
+  function resetForm() {
+    setFormData({
+      title: '',
+      content: '',
+      source_url: '',
+      source_name: '',
+      image_url: '',
+      published_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      approved: false,
+    });
+  }
+
+  function openEditModal(newsItem: AgroNews) {
     setSelectedNews(newsItem);
     setFormData({
       title: newsItem.title,
@@ -217,6 +193,10 @@ export default function NewsManager() {
       source_url: newsItem.source_url,
       source_name: newsItem.source_name,
       image_url: newsItem.image_url,
+      published_at: newsItem.published_at,
+      translated_at: newsItem.translated_at,
+      created_at: newsItem.created_at,
+      approved: newsItem.approved,
     });
     setShowEditModal(true);
   }
@@ -387,7 +367,7 @@ export default function NewsManager() {
         </div>
       )}
 
-      {message.type && (
+      {message && (
         <div className={`mb-4 p-4 ${
           message.type === 'success' ? 'bg-green-100 text-green-800' : 
           message.type === 'error' ? 'bg-red-100 text-red-800' : 
@@ -399,7 +379,7 @@ export default function NewsManager() {
              <RefreshCw className="h-5 w-5 mr-2" />}
             {message.text}
           </div>
-          <button onClick={() => setMessage({type: null, text: ''})}>
+          <button onClick={() => setMessage(null)}>
             <X className="h-5 w-5" />
           </button>
         </div>
