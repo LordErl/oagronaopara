@@ -269,7 +269,7 @@ export async function deleteExpiredOffers() {
 }
 
 export async function fetchNewsFromOpenAI(): Promise<NewsResponse> {
-  const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY || import.meta.env.VITE_OPENAI_API_KEY || '';
   
   const prompt = `MARAVILHOSO DIA!!! Preciso que você atue como um minerador de notícias do setor agro mundial, focando em informações relevantes para exportadores e importadores de commodities no Brasil. Por favor, me retorne EXATAMENTE 5 notícias, cada uma no seguinte formato JSON:\n\n[\n  {\n    "titulo": "...",\n    "resumo": "...",\n    "url_fonte": "...",\n    "nome_fonte": "...",\n    "url_imagem": "..."\n  }\n]\n\nO resumo deve ser claro e objetivo (máx. 3 frases). As imagens devem ser públicas e de alta resolução, relacionadas ao tema da notícia. Apenas retorne o array JSON, sem comentários ou texto adicional.`;
 
